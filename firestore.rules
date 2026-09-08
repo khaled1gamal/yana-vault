@@ -1,0 +1,162 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function tokenCapsule() {
+      return request.auth.token.capsuleId;
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == 'admin';
+    }
+
+    function isRecipient() {
+      return signedIn() && role() == 'recipient';
+    }
+
+    function isFamily() {
+      return signedIn() && role() == 'family';
+    }
+
+    function inCapsule(capsuleId) {
+      return signedIn() && tokenCapsule() == capsuleId;
+    }
+
+    function configPath(capsuleId) {
+      return /databases/$(database)/documents/capsules/$(capsuleId)/settings/config;
+    }
+
+    function isUnlocked(capsuleId) {
+      return exists(configPath(capsuleId))
+        && get(configPath(capsuleId)).data.unlockAt is timestamp
+        && request.time >= get(configPath(capsuleId)).data.unlockAt;
+    }
+
+    function indexKeys() {
+      return ['id', 'capsuleId', 'authorId', 'authorRole', 'type', 'createdAt', 'status', 'mediaCount', 'hasAudio'];
+    }
+
+    function configUnlockAt(capsuleId) {
+      return get(configPath(capsuleId)).data.unlockAt;
+    }
+
+    function validSealedDocument(capsuleId) {
+      return request.resource.data.keys().hasOnly([
+          'capsuleId', 'authorId', 'authorRole', 'type', 'title', 'content',
+          'caption', 'mood', 'tags', 'vibe', 'createdAt', 'updatedAt',
+          'unlockAt', 'isLocked', 'status', 'storagePaths', 'metadata'
+        ])
+        && request.resource.data.capsuleId == capsuleId
+        && request.resource.data.unlockAt == configUnlockAt(capsuleId)
+        && request.resource.data.isLocked == true
+        && request.resource.data.status == 'sealed'
+        && request.resource.data.authorId == uid()
+        && request.resource.data.authorRole == role()
+        && request.resource.data.title is string
+        && request.resource.data.content is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.content.size() <= 8000;
+    }
+
+    function validFamilyDocument(capsuleId) {
+      return request.resource.data.keys().hasOnly([
+          'capsuleId', 'authorId', 'authorRole', 'type', 'title', 'content',
+          'caption', 'createdAt', 'updatedAt', 'unlockAt', 'isLocked',
+          'status', 'storagePaths'
+        ])
+        && request.resource.data.capsuleId == capsuleId
+        && request.resource.data.unlockAt == configUnlockAt(capsuleId)
+        && request.resource.data.isLocked == true
+        && request.resource.data.status == 'sealed'
+        && request.resource.data.authorId == uid()
+        && request.resource.data.authorRole == role()
+        && request.resource.data.title is string
+        && request.resource.data.content is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.content.size() <= 8000;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+      allow write: if false;
+    }
+
+    match /capsules/{capsuleId} {
+      allow read: if inCapsule(capsuleId) || isAdmin();
+      allow write: if false;
+
+      match /settings/config {
+        allow read: if inCapsule(capsuleId) || isAdmin();
+        allow write: if false;
+      }
+
+      match /memoryIndex/{memoryId} {
+        allow read: if inCapsule(capsuleId);
+        allow create: if inCapsule(capsuleId)
+          && (isRecipient() || isAdmin())
+          && request.resource.data.authorId == uid()
+          && request.resource.data.capsuleId == capsuleId
+          && request.resource.data.keys().hasOnly(indexKeys())
+          && !('content' in request.resource.data)
+          && !('storagePaths' in request.resource.data)
+          && !('vibe' in request.resource.data);
+        allow update: if false;
+        allow delete: if isAdmin()
+          || (inCapsule(capsuleId) && resource.data.authorId == uid() && isRecipient());
+      }
+
+      match /memories/{memoryId} {
+        allow read: if isAdmin()
+          || (isRecipient() && inCapsule(capsuleId) && isUnlocked(capsuleId));
+        allow create: if inCapsule(capsuleId)
+          && (isRecipient() || isAdmin())
+          && validSealedDocument(capsuleId);
+        allow update, delete: if isAdmin()
+          || (isRecipient() && inCapsule(capsuleId) && resource.data.authorId == uid());
+      }
+
+      match /familyIndex/{messageId} {
+        allow read: if inCapsule(capsuleId);
+        allow create: if inCapsule(capsuleId)
+          && (isFamily() || isAdmin())
+          && request.resource.data.authorId == uid()
+          && request.resource.data.capsuleId == capsuleId
+          && request.resource.data.keys().hasOnly(['id', 'capsuleId', 'authorId', 'authorRole', 'type', 'createdAt', 'mediaCount', 'hasAudio'])
+          && !('content' in request.resource.data);
+        allow update: if false;
+        allow delete: if isAdmin()
+          || (isFamily() && inCapsule(capsuleId) && resource.data.authorId == uid());
+      }
+
+      match /familyMessages/{messageId} {
+        allow read: if isAdmin()
+          || (isFamily() && resource.data.authorId == uid() && inCapsule(capsuleId))
+          || (isRecipient() && inCapsule(capsuleId) && isUnlocked(capsuleId));
+        allow create: if inCapsule(capsuleId)
+          && (isFamily() || isAdmin())
+          && validFamilyDocument(capsuleId);
+        allow update, delete: if isAdmin()
+          || (isFamily() && inCapsule(capsuleId) && resource.data.authorId == uid());
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isAdmin() && inCapsule(capsuleId);
+        allow write: if false;
+      }
+    }
+  }
+}

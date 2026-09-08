@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function inCapsule(capsuleId) {
+      return signedIn() && request.auth.token.capsuleId == capsuleId;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif).*')
+        || request.resource.contentType.matches('image/(JPEG|PNG|WEBP|HEIC|HEIF).*');
+    }
+
+    function isAudio() {
+      return request.resource.contentType.matches('audio/(mpeg|mp4|webm|wav|ogg|aac|x-m4a).*')
+        || request.resource.contentType.matches('audio/(MPEG|MP4|WEBM|WAV|OGG|AAC|X-M4A).*')
+        || request.resource.contentType.matches('audio/.*');
+    }
+
+    function validWrite(kind) {
+      return (
+        (kind == 'photos' && isImage() && request.resource.size <= 8 * 1024 * 1024)
+        || (kind == 'audio' && isAudio() && request.resource.size <= 10 * 1024 * 1024)
+      );
+    }
+
+    function unlocked(capsuleId) {
+      return firestore.get(/databases/(default)/documents/capsules/$(capsuleId)/settings/config).data.unlockAt
+        <= request.time;
+    }
+
+    match /capsules/{capsuleId}/users/{userId}/{folder}/{itemId}/{kind}/{fileId} {
+      allow create: if inCapsule(capsuleId)
+        && request.auth.uid == userId
+        && folder in ['memories', 'family']
+        && kind in ['photos', 'audio']
+        && validWrite(kind)
+        && (
+          (folder == 'memories' && (role() == 'recipient' || role() == 'admin'))
+          || (folder == 'family' && (role() == 'family' || role() == 'admin'))
+        );
+
+      allow update: if false;
+
+      allow delete: if inCapsule(capsuleId) && (
+        role() == 'admin' || request.auth.uid == userId
+      );
+
+      allow read: if inCapsule(capsuleId) && (
+        role() == 'admin'
+        || (role() == 'family' && request.auth.uid == userId)
+        || (role() == 'recipient' && unlocked(capsuleId))
+      );
+    }
+  }
+}

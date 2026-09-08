@@ -1,26 +1,95 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: #07071a;
+  --navy-2: #12122b;
+  --lilac: #c4b5fd;
+  --lavender: #e9d5ff;
+  --pink: #f9a8d4;
+  --glow: #d8b4fe;
+  --glass: rgba(18, 16, 40, 0.62);
+  --line: rgba(233, 213, 255, 0.18);
+  --text: #f8f4ff;
+  --muted: #c7bdd8;
+  --danger: #fb7185;
+  --ok: #86efac;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-navy: var(--navy);
+  --color-lilac: var(--lilac);
+  --color-lavender: var(--lavender);
+  --color-pink: var(--pink);
+  --font-sans: var(--font-outfit);
+  --font-serif: var(--font-cormorant);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--navy);
+  color: var(--text);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 700px at 10% -10%, rgba(196, 181, 253, 0.22), transparent 50%),
+    radial-gradient(900px 500px at 100% 0%, rgba(249, 168, 212, 0.16), transparent 46%),
+    radial-gradient(800px 600px at 50% 120%, rgba(99, 102, 241, 0.18), transparent 50%),
+    var(--navy);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lilac);
+  outline-offset: 3px;
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--line);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 20px 50px rgba(5, 4, 20, 0.45);
+  backdrop-filter: blur(22px);
+}
+
+.glow-lock {
+  filter: drop-shadow(0 0 18px rgba(216, 180, 254, 0.7));
+}
+
+.safe-bottom {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .safe-bottom {
+    padding-bottom: 2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
