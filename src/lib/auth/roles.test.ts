@@ -14,6 +14,9 @@ describe("role assignment", () => {
     expect(roleForEmail("tito@family.test", opts)).toBe("family");
     expect(roleForEmail("cousin@family.test", { ...opts, extraFamily: ["cousin@family.test"] })).toBe("family");
     expect(roleForEmail("stranger@example.com", opts)).toBeNull();
+    // When an email is removed from extraFamily, access is revoked
+    expect(roleForEmail("cousin@family.test", { ...opts, extraFamily: [] })).toBeNull();
+    expect(roleForEmail("tito@family.test", { ...opts, familyEmails: "" })).toBeNull();
   });
 });
 

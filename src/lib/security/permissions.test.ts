@@ -22,13 +22,17 @@ describe("permissions", () => {
 
   it("lets the recipient read memories only after server unlock", () => {
     expect(canReadSealedMemoryContent({ ...locked, role: "recipient", isUnlocked: true })).toBe(true);
+    expect(canReadSealedMemoryContent({ ...locked, role: "family", userId: "f1", isUnlocked: true })).toBe(false);
   });
 
-  it("lets family read only their own messages before unlock", () => {
+  it("lets family read only their own messages before and after unlock", () => {
     expect(canReadFamilyMessage({ ...locked, role: "family", userId: "f1" }, "f1")).toBe(true);
     expect(canReadFamilyMessage({ ...locked, role: "family", userId: "f1" }, "f2")).toBe(false);
+    expect(canReadFamilyMessage({ ...locked, role: "family", userId: "f1", isUnlocked: true }, "f1")).toBe(true);
+    expect(canReadFamilyMessage({ ...locked, role: "family", userId: "f1", isUnlocked: true }, "f2")).toBe(false);
     expect(canReadFamilyMessage({ ...locked, role: "recipient" }, "f1")).toBe(false);
     expect(canReadFamilyMessage({ ...locked, role: "recipient", isUnlocked: true }, "f1")).toBe(true);
+    expect(canReadFamilyMessage({ ...locked, role: "admin" }, "f1")).toBe(true);
   });
 
   it("restricts create and unlock-date changes by role", () => {

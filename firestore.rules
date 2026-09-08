@@ -115,8 +115,7 @@ service cloud.firestore {
           && !('storagePaths' in request.resource.data)
           && !('vibe' in request.resource.data);
         allow update: if false;
-        allow delete: if isAdmin()
-          || (inCapsule(capsuleId) && resource.data.authorId == uid() && isRecipient());
+        allow delete: if isAdmin();
       }
 
       match /memories/{memoryId} {
@@ -125,8 +124,8 @@ service cloud.firestore {
         allow create: if inCapsule(capsuleId)
           && (isRecipient() || isAdmin())
           && validSealedDocument(capsuleId);
-        allow update, delete: if isAdmin()
-          || (isRecipient() && inCapsule(capsuleId) && resource.data.authorId == uid());
+        allow update: if false;
+        allow delete: if isAdmin();
       }
 
       match /familyIndex/{messageId} {
@@ -138,8 +137,7 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['id', 'capsuleId', 'authorId', 'authorRole', 'type', 'createdAt', 'mediaCount', 'hasAudio'])
           && !('content' in request.resource.data);
         allow update: if false;
-        allow delete: if isAdmin()
-          || (isFamily() && inCapsule(capsuleId) && resource.data.authorId == uid());
+        allow delete: if isAdmin();
       }
 
       match /familyMessages/{messageId} {
@@ -149,8 +147,8 @@ service cloud.firestore {
         allow create: if inCapsule(capsuleId)
           && (isFamily() || isAdmin())
           && validFamilyDocument(capsuleId);
-        allow update, delete: if isAdmin()
-          || (isFamily() && inCapsule(capsuleId) && resource.data.authorId == uid());
+        allow update: if false;
+        allow delete: if isAdmin();
       }
 
       match /auditLogs/{logId} {

@@ -21,8 +21,7 @@ service firebase.storage {
 
     function isAudio() {
       return request.resource.contentType.matches('audio/(mpeg|mp4|webm|wav|ogg|aac|x-m4a).*')
-        || request.resource.contentType.matches('audio/(MPEG|MP4|WEBM|WAV|OGG|AAC|X-M4A).*')
-        || request.resource.contentType.matches('audio/.*');
+        || request.resource.contentType.matches('audio/(MPEG|MP4|WEBM|WAV|OGG|AAC|X-M4A).*');
     }
 
     function validWrite(kind) {

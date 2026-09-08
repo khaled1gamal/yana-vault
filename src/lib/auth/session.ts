@@ -32,10 +32,20 @@ export async function readSession(): Promise<SessionUser | null> {
   if (!token) return null;
 
   try {
-    const decoded = await adminAuth().verifySessionCookie(token, false);
+    const decoded = await adminAuth().verifySessionCookie(token, true);
     const role = decoded.role as UserRole | undefined;
     const capsuleId = decoded.capsuleId as string | undefined;
     if (!decoded.email || !role || !capsuleId) return null;
+
+    if (role === "family") {
+      const configSnap = await adminDb().doc(`capsules/${capsuleId}/settings/config`).get();
+      const familyEmails = (configSnap.data()?.familyEmails as string[] | undefined) ?? [];
+      const currentRole = roleForEmail(decoded.email, familyEmails);
+      if (currentRole !== "family") {
+        return null;
+      }
+    }
+
     return {
       uid: decoded.uid,
       email: decoded.email,
@@ -45,6 +55,44 @@ export async function readSession(): Promise<SessionUser | null> {
     };
   } catch {
     return null;
+  }
+}
+
+export async function revokeFamilyUserAccess(
+  email: string,
+  capsuleId: string,
+  adminUid: string,
+): Promise<void> {
+  if (!isAdminConfigured()) return;
+  const normalized = email.toLowerCase();
+  try {
+    const userRecord = await adminAuth().getUserByEmail(normalized);
+    if (!userRecord) return;
+
+    await adminAuth().setCustomUserClaims(userRecord.uid, { role: null, capsuleId: null });
+    await adminAuth().revokeRefreshTokens(userRecord.uid);
+    await adminDb().doc(`users/${userRecord.uid}`).set(
+      {
+        role: null,
+        revokedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    await writeAudit({
+      capsuleId,
+      actorId: adminUid,
+      actorRole: "admin",
+      action: "family_access_revoked",
+      targetType: "user",
+      targetId: userRecord.uid,
+      metadata: { email: normalized },
+    });
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code !== "auth/user-not-found") {
+      console.warn(`Failed to revoke family user access for ${normalized}:`, error);
+    }
   }
 }
 

@@ -131,39 +131,50 @@ export async function GET(request: Request) {
       if (!time.isUnlocked && session.role !== "admin") {
         return NextResponse.json({ error: "The vault is still sealed.", sealed: true }, { status: 403 });
       }
+
       let memoriesDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
-      try {
-        const memories = await adminDb()
-          .collection(`capsules/${session.capsuleId}/memories`)
-          .orderBy("createdAt", "desc")
-          .limit(40)
-          .get();
-        memoriesDocs = memories.docs;
-      } catch {
-        const memories = await adminDb()
-          .collection(`capsules/${session.capsuleId}/memories`)
-          .limit(40)
-          .get();
-        memoriesDocs = memories.docs.slice().sort((a, b) => {
-          const aData = a.data();
-          const bData = b.data();
-          const aTime = aData.createdAt?.toMillis ? aData.createdAt.toMillis() : new Date(aData.createdAt ?? 0).getTime();
-          const bTime = bData.createdAt?.toMillis ? bData.createdAt.toMillis() : new Date(bData.createdAt ?? 0).getTime();
-          return bTime - aTime;
-        });
+      if (canReadSealedMemoryContent(ctx)) {
+        try {
+          const memories = await adminDb()
+            .collection(`capsules/${session.capsuleId}/memories`)
+            .orderBy("createdAt", "desc")
+            .limit(40)
+            .get();
+          memoriesDocs = memories.docs;
+        } catch {
+          const memories = await adminDb()
+            .collection(`capsules/${session.capsuleId}/memories`)
+            .limit(40)
+            .get();
+          memoriesDocs = memories.docs.slice().sort((a, b) => {
+            const aData = a.data();
+            const bData = b.data();
+            const aTime = aData.createdAt?.toMillis ? aData.createdAt.toMillis() : new Date(aData.createdAt ?? 0).getTime();
+            const bTime = bData.createdAt?.toMillis ? bData.createdAt.toMillis() : new Date(bData.createdAt ?? 0).getTime();
+            return bTime - aTime;
+          });
+        }
       }
 
       let familyDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
       try {
-        const family = await adminDb()
-          .collection(`capsules/${session.capsuleId}/familyMessages`)
+        let queryRef: FirebaseFirestore.Query = adminDb()
+          .collection(`capsules/${session.capsuleId}/familyMessages`);
+        if (session.role === "family") {
+          queryRef = queryRef.where("authorId", "==", session.uid);
+        }
+        const family = await queryRef
           .orderBy("createdAt", "desc")
           .limit(40)
           .get();
         familyDocs = family.docs;
       } catch {
-        const family = await adminDb()
-          .collection(`capsules/${session.capsuleId}/familyMessages`)
+        let queryRef: FirebaseFirestore.Query = adminDb()
+          .collection(`capsules/${session.capsuleId}/familyMessages`);
+        if (session.role === "family") {
+          queryRef = queryRef.where("authorId", "==", session.uid);
+        }
+        const family = await queryRef
           .limit(40)
           .get();
         familyDocs = family.docs.slice().sort((a, b) => {
@@ -175,12 +186,17 @@ export async function GET(request: Request) {
         });
       }
 
+      const allowedFamilyDocs = familyDocs.filter((docSnap) => {
+        const data = docSnap.data();
+        return canReadFamilyMessage(ctx, String(data.authorId ?? ""));
+      });
+
       return NextResponse.json({
         memories: await Promise.all(
           memoriesDocs.map((docSnap) => presentDoc(docSnap.id, docSnap.data() as Record<string, unknown>, true)),
         ),
         familyMessages: await Promise.all(
-          familyDocs.map((docSnap) => presentDoc(docSnap.id, docSnap.data() as Record<string, unknown>, true)),
+          allowedFamilyDocs.map((docSnap) => presentDoc(docSnap.id, docSnap.data() as Record<string, unknown>, true)),
         ),
       });
     }

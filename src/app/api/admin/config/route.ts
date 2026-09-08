@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { DEFAULT_TIMEZONE, UNLOCK_AGE_YEARS, publicCapsuleId } from "@/constants/capsule";
-import { requireRole, writeAudit } from "@/lib/auth/session";
+import { requireRole, revokeFamilyUserAccess, writeAudit } from "@/lib/auth/session";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { computeUnlockIso, readCapsuleConfig } from "@/lib/time/serverTime";
 import { AppError, toUserMessage } from "@/lib/errors";
@@ -44,7 +44,9 @@ export async function PUT(request: Request) {
     }
 
     const current = await readCapsuleConfig(session.capsuleId);
-    const unlockChanged = current && current.birthDate !== parsed.data.birthDate;
+    const unlockChanged =
+      current &&
+      (current.birthDate !== parsed.data.birthDate || current.timezone !== parsed.data.timezone);
     if (unlockChanged && parsed.data.confirmUnlockChange !== true) {
       return NextResponse.json(
         {
@@ -53,6 +55,14 @@ export async function PUT(request: Request) {
         },
         { status: 409 },
       );
+    }
+
+    const oldFamilyEmails = (current?.familyEmails ?? []).map((email) => email.toLowerCase());
+    const newFamilyEmails = parsed.data.familyEmails.map((email) => email.toLowerCase());
+    const removedFamilyEmails = oldFamilyEmails.filter((email) => !newFamilyEmails.includes(email));
+
+    for (const email of removedFamilyEmails) {
+      await revokeFamilyUserAccess(email, session.capsuleId, session.uid);
     }
 
     const computed = computeUnlockIso(parsed.data.birthDate, parsed.data.timezone, UNLOCK_AGE_YEARS);
@@ -72,7 +82,7 @@ export async function PUT(request: Request) {
       maxImageBytes: parsed.data.maxImageBytes,
       maxAudioBytes: parsed.data.maxAudioBytes,
       maxRecordingSeconds: parsed.data.maxRecordingSeconds,
-      familyEmails: parsed.data.familyEmails.map((email) => email.toLowerCase()),
+      familyEmails: newFamilyEmails,
       updatedAt: new Date().toISOString(),
       updatedBy: session.uid,
     };
@@ -98,6 +108,8 @@ export async function PUT(request: Request) {
       metadata: {
         birthDate: parsed.data.birthDate,
         previousBirthDate: current?.birthDate ?? "",
+        timezone: parsed.data.timezone,
+        previousTimezone: current?.timezone ?? "",
       },
     });
 
